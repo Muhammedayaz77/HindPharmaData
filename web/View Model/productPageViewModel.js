@@ -9,16 +9,29 @@ if (!medical) location.replace('medical.html');
 
 const DEFAULT_IMAGE = '../Assets/Images/hind-pharma-default.svg';
 const UNITS = ['PIECE', 'BOX', 'CASE', 'STRIP', 'PACK', 'BOTTLE', 'TUBE', 'VIAL', 'OTHER'];
+const RENDER_BATCH_SIZE = 60;
+const SEARCH_DEBOUNCE_MS = 180;
+
 const dataSource = new LocalFirstProductDataSource('../data/products.json');
 const viewModel = new ProductViewModel(dataSource);
 let filtered = [];
-let order = JSON.parse(localStorage.getItem('hindPharmaOrder') || '[]').map(item => {
-  const unit = UNITS.includes(item.unit) ? item.unit : 'PIECE';
-  const key = item.key && item.key.includes(`:${unit}`) ? item.key : `${item.key || `product:${item.productId || item.name || 'item'}`}:${unit}`;
-  return { ...item, unit, key };
-});
+let renderedCount = 0;
 let selected = null;
 let manualMode = false;
+
+let order;
+try {
+  const savedOrder = JSON.parse(localStorage.getItem('hindPharmaOrder') || '[]');
+  order = Array.isArray(savedOrder) ? savedOrder.map(item => {
+    const unit = UNITS.includes(item.unit) ? item.unit : 'PIECE';
+    const key = item.key && item.key.includes(`:${unit}`)
+      ? item.key
+      : `${item.key || `product:${item.productId || item.name || 'item'}`}:${unit}`;
+    return { ...item, unit, key };
+  }) : [];
+} catch {
+  order = [];
+}
 
 const grid = document.getElementById('grid');
 const search = document.getElementById('search');
@@ -30,6 +43,7 @@ const manualName = document.getElementById('manualName');
 const modalTitle = document.getElementById('modalTitle');
 const modalInfo = document.getElementById('modalInfo');
 const addButton = document.getElementById('add');
+const cartButton = document.getElementById('cartBtn');
 
 const esc = value => String(value ?? '').replace(/[&<>\\'\"]/g, char => ({
   '&': '&amp;',
@@ -40,7 +54,7 @@ const esc = value => String(value ?? '').replace(/[&<>\\'\"]/g, char => ({
 }[char]));
 
 function updateCart() {
-  document.getElementById('cartBtn').textContent = `Order (${order.length})`;
+  cartButton.textContent = `Order (${order.length})`;
 }
 
 function updateAddButton() {
@@ -50,10 +64,10 @@ function updateAddButton() {
   addButton.setAttribute('aria-disabled', String(!canAdd));
 }
 
-function render() {
-  const cards = filtered.map((product, index) => `
+function productCard(product, index) {
+  return `
     <button class="card" type="button" data-index="${index}" aria-label="Select ${esc(product.name || 'product')}">
-      <img class="productImage" src="${esc(product.image || DEFAULT_IMAGE)}" alt="" onerror="this.onerror=null;this.src='${DEFAULT_IMAGE}'">
+      <img class="productImage" src="${esc(product.image || DEFAULT_IMAGE)}" alt="" loading="lazy" decoding="async" onerror="this.onerror=null;this.src='${DEFAULT_IMAGE}'">
       <span class="productInfo">
         <span class="name">${esc(product.name || 'Unnamed Product')}</span>
         ${product.company ? `<span class="company">${esc(product.company)}</span>` : ''}
@@ -61,45 +75,51 @@ function render() {
         ${product.mrp != null && product.mrp !== '' ? `<span class="mrp">MRP: ₹${esc(product.mrp)}</span>` : ''}
       </span>
       <span class="chevron" aria-hidden="true">›</span>
-    </button>`).join('');
-
-  const manualCard = `
-    <div class="manual">
-      <strong>Product not found?</strong>
-      <p>You can temporarily add a product that is not in the catalogue.</p>
-      <button id="manualAdd" type="button">ADD PRODUCT TEMPORARILY</button>
-    </div>`;
-
-  grid.innerHTML = cards + manualCard;
-  count.textContent = `${filtered.length} product${filtered.length === 1 ? '' : 's'} found`;
-
-  grid.querySelectorAll('.card').forEach(card => {
-    card.addEventListener('click', () => openProduct(Number(card.dataset.index)), { once: true });
-  });
-  document.getElementById('manualAdd').addEventListener('click', openManualProduct);
+    </button>`;
 }
 
-async function loadProducts() {
-  try {
-    await viewModel.loadProducts();
-    filtered = viewModel.products;
-    render();
-  } catch (error) {
-    count.textContent = 'Could not load products';
-    filtered = [];
-    render();
+function render(reset = true) {
+  if (reset) {
+    renderedCount = 0;
+    grid.innerHTML = '';
   }
-}
 
-async function searchProducts(query) {
-  try {
-    filtered = await viewModel.searchProducts(query);
-    render();
-  } catch (error) {
-    count.textContent = 'Search failed';
-    filtered = [];
-    render();
+  const end = Math.min(renderedCount + RENDER_BATCH_SIZE, filtered.length);
+  if (end > renderedCount) {
+    const html = filtered.slice(renderedCount, end)
+      .map((product, offset) => productCard(product, renderedCount + offset))
+      .join('');
+    grid.insertAdjacentHTML('beforeend', html);
+    renderedCount = end;
   }
+
+  let loadMore = document.getElementById('loadMoreProducts');
+  if (renderedCount < filtered.length) {
+    if (!loadMore) {
+      loadMore = document.createElement('button');
+      loadMore.id = 'loadMoreProducts';
+      loadMore.type = 'button';
+      loadMore.className = 'manual';
+      loadMore.textContent = 'LOAD MORE PRODUCTS';
+      loadMore.addEventListener('click', () => render(false));
+    }
+    grid.appendChild(loadMore);
+  } else if (loadMore) {
+    loadMore.remove();
+  }
+
+  if (filtered.length === 0) {
+    grid.insertAdjacentHTML('beforeend', '<div class="empty">No matching products found.</div>');
+  }
+
+  const manualCard = document.createElement('div');
+  manualCard.id = 'manualCard';
+  manualCard.className = 'manual';
+  manualCard.innerHTML = '<strong>Product not found?</strong><p>You can temporarily add a product that is not in the catalogue.</p><button id="manualAdd" type="button">ADD PRODUCT TEMPORARILY</button>';
+  grid.appendChild(manualCard);
+  manualCard.querySelector('#manualAdd').addEventListener('click', openManualProduct);
+
+  count.textContent = `${filtered.length} product${filtered.length === 1 ? '' : 's'} found${renderedCount < filtered.length ? ` • showing first ${renderedCount}` : ''}`;
 }
 
 function openProduct(index) {
@@ -136,6 +156,12 @@ function openManualProduct() {
   modal.classList.add('show');
   setTimeout(() => manualName.focus(), 0);
 }
+
+grid.addEventListener('click', event => {
+  const card = event.target.closest('.card');
+  if (!card || !grid.contains(card)) return;
+  openProduct(Number(card.dataset.index));
+});
 
 document.getElementById('minus').onclick = () => {
   qty.value = Math.max(0, (+qty.value || 0) - 1);
@@ -209,23 +235,47 @@ addButton.onclick = () => {
 
   setTimeout(() => {
     adding = false;
-    addButton.disabled = false;
+    updateAddButton();
   }, 300);
 };
 
 let cartOpening = false;
-document.getElementById('cartBtn').onclick = () => {
+cartButton.onclick = () => {
   if (cartOpening) return;
   cartOpening = true;
-  document.getElementById('cartBtn').disabled = true;
+  cartButton.disabled = true;
   location.href = 'order.html';
 };
 
 let searchTimer;
 search.addEventListener('input', event => {
   clearTimeout(searchTimer);
-  searchTimer = setTimeout(() => searchProducts(event.target.value), 160);
+  searchTimer = setTimeout(() => searchProducts(event.target.value), SEARCH_DEBOUNCE_MS);
 });
+
+async function loadProducts() {
+  try {
+    count.textContent = 'Loading products...';
+    await viewModel.loadProducts();
+    filtered = viewModel.products;
+    render(true);
+  } catch (error) {
+    count.textContent = 'Could not load products';
+    filtered = [];
+    render(true);
+  }
+}
+
+async function searchProducts(query) {
+  try {
+    filtered = await viewModel.searchProducts(query);
+    render(true);
+  } catch (error) {
+    count.textContent = 'Search failed';
+    filtered = [];
+    render(true);
+  }
+}
 
 document.getElementById('intro').textContent = `Ordering for ${medical}. Tap anywhere on a product card to select it.`;
 localStorage.setItem('hindPharmaOrder', JSON.stringify(order));
