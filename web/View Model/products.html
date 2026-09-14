@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<meta name="description" content="Hind Pharma product catalogue">
+<title>Products | Hind Pharma</title>
+<link rel="stylesheet" href="../View Model/products.css?v=20260914-1"><link rel="stylesheet" href="../Assets/theme.css?v=20260912-1">
+</head>
+<body>
+<header class="header"><div class="container nav"><a class="back" href="medical.html">← Medical</a><div class="brand">HIND PHARMA</div><button class="cart" id="cartBtn" type="button">Order (0)</button></div></header>
+<main class="container">
+<section class="hero"><div class="eyebrow">Product Catalogue</div><h1>Select Products</h1><p id="intro">Search the product name, company or formula and tap anywhere on a product card to select it.</p><div class="search"><span>⌕</span><input id="search" type="search" placeholder="Search product..." autocomplete="off"></div><div class="toolbar"><div class="count" id="count">Loading products...</div></div></section>
+<section class="grid" id="grid"></section>
+</main>
+<div class="modal" id="modal"><div class="sheet"><h2 id="modalTitle">Add Product</h2><p id="modalInfo">Add a product to this order.</p><input id="manualName" class="manualName" type="text" placeholder="Enter product name" autocomplete="off" style="display:none"><div class="qty"><button id="minus" type="button" aria-label="Decrease quantity">−</button><input id="qty" type="number" min="0" value="1" inputmode="numeric" aria-label="Quantity"><button id="plus" type="button" aria-label="Increase quantity">+</button></div><label class="unitLabel" for="unit">Unit</label><select id="unit" class="unit" aria-label="Quantity unit"><option value="PIECE">PIECE</option><option value="BOX">BOX</option><option value="CASE">CASE</option><option value="STRIP">STRIP</option><option value="PACK">PACK</option><option value="BOTTLE">BOTTLE</option><option value="TUBE">TUBE</option><option value="VIAL">VIAL</option><option value="OTHER">OTHER</option></select><div class="actions"><button class="cancel" id="cancel" type="button">Cancel</button><button class="add" id="add" type="button">Add to Order</button></div></div></div>
+<script type="module" src="../View Model/productPageViewModel.js?v=20260914-1"></script>
+<script src="../Assets/theme.js?v=20260912-1"></script></body>
+</html>
